@@ -15,7 +15,7 @@ export const getTotalRevenue = async (storeId: string) => {
     }
   });
 
-  const totalRevenue = paidOrders.reduce((total, order) => {
+  const totalRevenue = paidOrders.reduce((total: number, order) => { // Aquí se especifica el tipo de 'total' como 'number'
     const orderTotal = order.orderItems.reduce((orderSum, item) => {
       return orderSum + item.product.price.toNumber();
     }, 0);
