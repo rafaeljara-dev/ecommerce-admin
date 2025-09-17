@@ -25,8 +25,7 @@ const DashboardPage: React.FC<DashboardPageProps> = async ({
   const stockCount = await getStockCount(params.storeId);
 
   return (
-    <div className="flex-col">
-      <div className="flex-1 space-y-4 p-8 pt-6">
+    <div className="flex-1 space-y-4 p-8 pt-6">
         <Heading title="Dashboard" description="Overview of your store" />
         <Separator />
         <div className="grid gap-4 grid-cols-3">
@@ -68,7 +67,6 @@ const DashboardPage: React.FC<DashboardPageProps> = async ({
             <Overview data={graphRevenue} />
           </CardContent>
         </Card>
-      </div>
     </div>
   );
 };
