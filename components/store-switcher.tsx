@@ -2,7 +2,6 @@
 
 import { Check, PlusCircle, ChevronsUpDown, Store as StoreIcon } from "lucide-react"
 import { useState } from "react";
-import { Store } from "@prisma/client";
 import { useParams, useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -21,9 +20,18 @@ import {
 
 type PopoverTriggerProps = React.ComponentPropsWithoutRef<typeof PopoverTrigger>
 
+interface Store {
+    id: string;
+    name: string;
+    slug?: string;
+    userId?: string;
+    createdAt?: any;
+    updatedAt?: any;
+}
+
 interface StoreSwitcherProps extends PopoverTriggerProps {
     items: Store[];
-};
+}
 
 export default function StoreSwitcher({
     className,
@@ -107,4 +115,4 @@ export default function StoreSwitcher({
             </PopoverContent>
         </Popover>
     );
-};
+}

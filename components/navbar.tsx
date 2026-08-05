@@ -1,23 +1,29 @@
-import { UserButton, auth } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
 
 import StoreSwitcher from "@/components/store-switcher";
 import { MainNav } from "@/components/main-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
-import prismadb from "@/lib/prismadb";
+import { UserNav } from "@/components/user-nav";
+import { db } from "@/lib/firebase";
+import { getCurrentUser } from "@/lib/auth";
 
 const Navbar = async () => {
-    const { userId } = auth();
+    const user = await getCurrentUser();
 
-    if (!userId) {
+    if (!user) {
         redirect('/sign-in');
     }
 
-    const stores = await prismadb.store.findMany({
-        where: {
-            userId,
-        }
-    });
+    const storesSnapshot = await db
+        .collection('stores')
+        .where('userId', '==', user.userId)
+        .orderBy('createdAt', 'desc')
+        .get();
+
+    const stores = storesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    }));
 
     return (
         <div className="border-b">
@@ -26,7 +32,7 @@ const Navbar = async () => {
                 <MainNav className="mx-6" />
                 <div className="ml-auto flex items-center space-x-4">
                     <ThemeToggle />
-                    <UserButton afterSignOutUrl="/" />
+                    <UserNav />
                 </div>
             </div>
         </div>

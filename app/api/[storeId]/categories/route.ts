@@ -1,79 +1,113 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs';
+import { db } from '@/lib/firebase';
+import { getCurrentUser } from '@/lib/auth';
 
-import prismadb from '@/lib/prismadb';
- 
 export async function POST(
-  req: Request,
-  { params }: { params: { storeId: string } }
+    req: Request,
+    { params }: { params: Promise<{ storeId: string }> }
 ) {
-  try {
-    const { userId } = auth();
+    try {
+        const { storeId } = await params;
+        const user = await getCurrentUser();
+        const body = await req.json();
 
-    const body = await req.json();
+        const { name, billboardId } = body;
 
-    const { name, billboardId } = body;
+        if (!user) {
+            return new NextResponse("Unauthenticated", { status: 403 });
+        }
 
-    if (!userId) {
-      return new NextResponse("Unauthenticated", { status: 403 });
+        if (!name) {
+            return new NextResponse("Name is required", { status: 400 });
+        }
+
+        if (!billboardId) {
+            return new NextResponse("Billboard ID is required", { status: 400 });
+        }
+
+        if (!storeId) {
+            return new NextResponse("Store id is required", { status: 400 });
+        }
+
+        // Verify store ownership
+        const storeDoc = await db.collection('stores').doc(storeId).get();
+
+        if (!storeDoc.exists || storeDoc.data()?.userId !== user.userId) {
+            return new NextResponse("Unauthorized", { status: 405 });
+        }
+
+        // Get billboard data for denormalization
+        const billboardDoc = await db
+            .collection('stores')
+            .doc(storeId)
+            .collection('billboards')
+            .doc(billboardId)
+            .get();
+
+        const billboardData = billboardDoc.data();
+
+        const categoryRef = await db
+            .collection('stores')
+            .doc(storeId)
+            .collection('categories')
+            .add({
+                name,
+                billboardId,
+                billboardLabel: billboardData?.label || '',
+                billboardImageUrl: billboardData?.imageUrl || '',
+                createdAt: new Date(),
+                updatedAt: new Date()
+            });
+
+        const categoryDoc = await categoryRef.get();
+
+        return NextResponse.json({
+            id: categoryDoc.id,
+            ...categoryDoc.data()
+        });
+    } catch (error) {
+        console.log('[CATEGORIES_POST]', error);
+        return new NextResponse("Internal error", { status: 500 });
     }
-
-    if (!name) {
-      return new NextResponse("Name is required", { status: 400 });
-    }
-    
-    if (!billboardId) {
-      return new NextResponse("Billboard ID is required", { status: 400 });
-    }
-
-    if (!params.storeId) {
-      return new NextResponse("Store id is required", { status: 400 });
-    }
-
-    const storeByUserId = await prismadb.store.findFirst({
-      where: {
-        id: params.storeId,
-        userId,
-      }
-    });
-
-    if (!storeByUserId) {
-      return new NextResponse("Unauthorized", { status: 405 });
-    }
-
-    const category = await prismadb.category.create({
-      data: {
-        name,
-        billboardId,
-        storeId: params.storeId,
-      }
-    });
-  
-    return NextResponse.json(category);
-  } catch (error) {
-    console.log('[CATEGORIES_POST]', error);
-    return new NextResponse("Internal error", { status: 500 });
-  }
-};
+}
 
 export async function GET(
-  req: Request,
-  { params }: { params: { storeId: string } }
+    req: Request,
+    { params }: { params: Promise<{ storeId: string }> }
 ) {
-  try {
-    if (!params.storeId) {
-      return new NextResponse("Store id is required", { status: 400 });
-    }
+    try {
+        const { storeId } = await params;
 
-    const categories = await prismadb.category.findMany({
-      where: {
-        storeId: params.storeId
-      }
-    });
-  
-    return NextResponse.json(categories);
-  } catch (error) {
-    console.log('[CATEGORIES_GET]', error);
-    return new NextResponse("Internal error", { status: 500 });
-  }
-};
+        if (!storeId) {
+            return new NextResponse("Store id is required", { status: 400 });
+        }
+
+        const categoriesSnapshot = await db
+            .collection('stores')
+            .doc(storeId)
+            .collection('categories')
+            .orderBy('createdAt', 'desc')
+            .get();
+
+        const categories = categoriesSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                name: data.name,
+                billboardId: data.billboardId,
+                billboard: {
+                    id: data.billboardId,
+                    label: data.billboardLabel,
+                    imageUrl: data.billboardImageUrl
+                },
+                createdAt: data.createdAt,
+                updatedAt: data.updatedAt
+            };
+        });
+
+        return NextResponse.json(categories);
+    } catch (error) {
+        console.log('[CATEGORIES_GET]', error);
+        return new NextResponse("Internal error", { status: 500 });
+    }
+}

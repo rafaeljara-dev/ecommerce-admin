@@ -1,16 +1,30 @@
-import prismadb from "@/lib/prismadb";
+import { db } from "@/lib/firebase";
 import { BillboardForm } from "./components/billboard-form";
 
 const BillboardPage = async ({
     params
 }: {
-    params: { billboardId: string }
+    params: Promise<{ storeId: string; billboardId: string }>
 }) => {
-    const billboard = await prismadb.billboard.findUnique({
-        where: {
-            id: params.billboardId
+    const { storeId, billboardId } = await params;
+
+    let billboard = null;
+
+    if (billboardId !== 'new') {
+        const billboardDoc = await db
+            .collection('stores')
+            .doc(storeId)
+            .collection('billboards')
+            .doc(billboardId)
+            .get();
+
+        if (billboardDoc.exists) {
+            billboard = {
+                id: billboardDoc.id,
+                ...billboardDoc.data()
+            };
         }
-    });
+    }
 
     return (
         <div className="flex-col">
@@ -18,7 +32,7 @@ const BillboardPage = async ({
                 <BillboardForm initialData={billboard} />
             </div>
         </div>
-    )
-}
+    );
+};
 
 export default BillboardPage;

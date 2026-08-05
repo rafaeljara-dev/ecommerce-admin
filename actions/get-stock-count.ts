@@ -1,12 +1,12 @@
-import prismadb from "@/lib/prismadb";
+import { db } from "@/lib/firebase";
 
 export const getStockCount = async (storeId: string) => {
-  const stockCount = await prismadb.product.count({
-    where: {
-      storeId,
-      isArchived: false,
-    }
-  });
+    const productsSnapshot = await db
+        .collection('stores')
+        .doc(storeId)
+        .collection('products')
+        .where('isArchived', '==', false)
+        .get();
 
-  return stockCount;
+    return productsSnapshot.size;
 };

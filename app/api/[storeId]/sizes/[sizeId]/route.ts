@@ -1,122 +1,134 @@
 import { NextResponse } from "next/server";
-
-import prismadb from "@/lib/prismadb";
-import { auth } from "@clerk/nextjs";
+import { db } from "@/lib/firebase";
+import { getCurrentUser } from "@/lib/auth";
 
 export async function GET(
-  req: Request,
-  { params }: { params: { sizeId: string } }
+    req: Request,
+    { params }: { params: Promise<{ storeId: string; sizeId: string }> }
 ) {
-  try {
-    if (!params.sizeId) {
-      return new NextResponse("Size id is required", { status: 400 });
-    }
+    try {
+        const { storeId, sizeId } = await params;
 
-    const size = await prismadb.size.findUnique({
-      where: {
-        id: params.sizeId
-      }
-    });
-  
-    return NextResponse.json(size);
-  } catch (error) {
-    console.log('[SIZE_GET]', error);
-    return new NextResponse("Internal error", { status: 500 });
-  }
-};
+        if (!sizeId) {
+            return new NextResponse("Size id is required", { status: 400 });
+        }
+
+        const sizeDoc = await db
+            .collection('stores')
+            .doc(storeId)
+            .collection('sizes')
+            .doc(sizeId)
+            .get();
+
+        if (!sizeDoc.exists) {
+            return new NextResponse("Size not found", { status: 404 });
+        }
+
+        return NextResponse.json({
+            id: sizeDoc.id,
+            ...sizeDoc.data()
+        });
+    } catch (error) {
+        console.log('[SIZE_GET]', error);
+        return new NextResponse("Internal error", { status: 500 });
+    }
+}
 
 export async function DELETE(
-  req: Request,
-  { params }: { params: { sizeId: string, storeId: string } }
+    req: Request,
+    { params }: { params: Promise<{ storeId: string; sizeId: string }> }
 ) {
-  try {
-    const { userId } = auth();
+    try {
+        const { storeId, sizeId } = await params;
+        const user = await getCurrentUser();
 
-    if (!userId) {
-      return new NextResponse("Unauthenticated", { status: 403 });
+        if (!user) {
+            return new NextResponse("Unauthenticated", { status: 403 });
+        }
+
+        if (!sizeId) {
+            return new NextResponse("Size id is required", { status: 400 });
+        }
+
+        // Verify store ownership
+        const storeDoc = await db.collection('stores').doc(storeId).get();
+
+        if (!storeDoc.exists || storeDoc.data()?.userId !== user.userId) {
+            return new NextResponse("Unauthorized", { status: 405 });
+        }
+
+        await db
+            .collection('stores')
+            .doc(storeId)
+            .collection('sizes')
+            .doc(sizeId)
+            .delete();
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.log('[SIZE_DELETE]', error);
+        return new NextResponse("Internal error", { status: 500 });
     }
-
-    if (!params.sizeId) {
-      return new NextResponse("Size id is required", { status: 400 });
-    }
-
-    const storeByUserId = await prismadb.store.findFirst({
-      where: {
-        id: params.storeId,
-        userId
-      }
-    });
-
-    if (!storeByUserId) {
-      return new NextResponse("Unauthorized", { status: 405 });
-    }
-
-    const size = await prismadb.size.delete({
-      where: {
-        id: params.sizeId
-      }
-    });
-  
-    return NextResponse.json(size);
-  } catch (error) {
-    console.log('[SIZE_DELETE]', error);
-    return new NextResponse("Internal error", { status: 500 });
-  }
-};
-
+}
 
 export async function PATCH(
-  req: Request,
-  { params }: { params: { sizeId: string, storeId: string } }
+    req: Request,
+    { params }: { params: Promise<{ storeId: string; sizeId: string }> }
 ) {
-  try {
-    const { userId } = auth();
+    try {
+        const { storeId, sizeId } = await params;
+        const user = await getCurrentUser();
+        const body = await req.json();
 
-    const body = await req.json();
+        const { name, value } = body;
 
-    const { name, value } = body;
+        if (!user) {
+            return new NextResponse("Unauthenticated", { status: 403 });
+        }
 
-    if (!userId) {
-      return new NextResponse("Unauthenticated", { status: 403 });
+        if (!name) {
+            return new NextResponse("Name is required", { status: 400 });
+        }
+
+        if (!value) {
+            return new NextResponse("Value is required", { status: 400 });
+        }
+
+        if (!sizeId) {
+            return new NextResponse("Size id is required", { status: 400 });
+        }
+
+        // Verify store ownership
+        const storeDoc = await db.collection('stores').doc(storeId).get();
+
+        if (!storeDoc.exists || storeDoc.data()?.userId !== user.userId) {
+            return new NextResponse("Unauthorized", { status: 405 });
+        }
+
+        await db
+            .collection('stores')
+            .doc(storeId)
+            .collection('sizes')
+            .doc(sizeId)
+            .update({
+                name,
+                value,
+                updatedAt: new Date()
+            });
+
+        const updatedSize = await db
+            .collection('stores')
+            .doc(storeId)
+            .collection('sizes')
+            .doc(sizeId)
+            .get();
+
+        return NextResponse.json({
+            id: updatedSize.id,
+            ...updatedSize.data()
+        });
+    } catch (error) {
+        console.log('[SIZE_PATCH]', error);
+        return new NextResponse("Internal error", { status: 500 });
     }
-
-    if (!name) {
-      return new NextResponse("Name is required", { status: 400 });
-    }
-
-    if (!value) {
-      return new NextResponse("Value is required", { status: 400 });
-    }
-
-
-    if (!params.sizeId) {
-      return new NextResponse("Size id is required", { status: 400 });
-    }
-
-    const storeByUserId = await prismadb.store.findFirst({
-      where: {
-        id: params.storeId,
-        userId
-      }
-    });
-
-    if (!storeByUserId) {
-      return new NextResponse("Unauthorized", { status: 405 });
-    }
-
-    const size = await prismadb.size.update({
-      where: {
-        id: params.sizeId
-      },
-      data: {
-        name,
-        value
-      }
-    });
-  
-    return NextResponse.json(size);
-  } catch (error) {
-    console.log('[SIZE_PATCH]', error);
-    return new NextResponse("Internal error", { status: 500 });
-  }
-};
+}

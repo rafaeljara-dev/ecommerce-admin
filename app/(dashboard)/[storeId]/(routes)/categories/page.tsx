@@ -1,41 +1,42 @@
 import { format } from "date-fns";
 
-import prismadb from "@/lib/prismadb";
+import { db } from "@/lib/firebase";
 
-import { CategoryColumn } from "./components/columns"
+import { CategoryColumn } from "./components/columns";
 import { CategoriesClient } from "./components/client";
 
 const CategoriesPage = async ({
-  params
+    params
 }: {
-  params: { storeId: string }
+    params: Promise<{ storeId: string }>
 }) => {
-  const categories = await prismadb.category.findMany({
-    where: {
-      storeId: params.storeId
-    },
-    include: {
-      billboard: true,
-    },
-    orderBy: {
-      createdAt: 'desc'
-    }
-  });
+    const { storeId } = await params;
 
-  const formattedCategories: CategoryColumn[] = categories.map((item) => ({
-    id: item.id,
-    name: item.name,
-    billboardLabel: item.billboard.label,
-    createdAt: format(item.createdAt, 'MMMM do, yyyy'),
-  }));
+    const categoriesSnapshot = await db
+        .collection('stores')
+        .doc(storeId)
+        .collection('categories')
+        .orderBy('createdAt', 'desc')
+        .get();
 
-  return (
-    <div className="flex-col">
-      <div className="flex-1 space-y-4 p-8 pt-6">
-        <CategoriesClient data={formattedCategories} />
-      </div>
-    </div>
-  );
+    const formattedCategories: CategoryColumn[] = categoriesSnapshot.docs.map((doc) => {
+        const data = doc.data();
+        const createdAt = data.createdAt?.toDate?.() || new Date(data.createdAt);
+        return {
+            id: doc.id,
+            name: data.name,
+            billboardLabel: data.billboardLabel || '',
+            createdAt: format(createdAt, 'MMMM do, yyyy'),
+        };
+    });
+
+    return (
+        <div className="flex-col">
+            <div className="flex-1 space-y-4 p-8 pt-6">
+                <CategoriesClient data={formattedCategories} />
+            </div>
+        </div>
+    );
 };
 
 export default CategoriesPage;

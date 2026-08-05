@@ -1,31 +1,51 @@
-import prismadb from "@/lib/prismadb";
+import { db } from "@/lib/firebase";
 
 import { CategoryForm } from "./components/category-form";
 
 const CategoryPage = async ({
-  params
+    params
 }: {
-  params: { categoryId: string, storeId: string }
+    params: Promise<{ categoryId: string; storeId: string }>
 }) => {
-  const category = await prismadb.category.findUnique({
-    where: {
-      id: params.categoryId
-    }
-  });
+    const { storeId, categoryId } = await params;
 
-  const billboards = await prismadb.billboard.findMany({
-    where: {
-      storeId: params.storeId
-    }
-  });
+    let category = null;
 
-  return ( 
-    <div className="flex-col">
-      <div className="flex-1 space-y-4 p-8 pt-6">
-        <CategoryForm billboards={billboards} initialData={category} />
-      </div>
-    </div>
-  );
-}
+    if (categoryId !== 'new') {
+        const categoryDoc = await db
+            .collection('stores')
+            .doc(storeId)
+            .collection('categories')
+            .doc(categoryId)
+            .get();
+
+        if (categoryDoc.exists) {
+            category = {
+                id: categoryDoc.id,
+                ...categoryDoc.data()
+            };
+        }
+    }
+
+    const billboardsSnapshot = await db
+        .collection('stores')
+        .doc(storeId)
+        .collection('billboards')
+        .orderBy('createdAt', 'desc')
+        .get();
+
+    const billboards = billboardsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    }));
+
+    return (
+        <div className="flex-col">
+            <div className="flex-1 space-y-4 p-8 pt-6">
+                <CategoryForm billboards={billboards} initialData={category} />
+            </div>
+        </div>
+    );
+};
 
 export default CategoryPage;

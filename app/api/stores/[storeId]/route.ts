@@ -1,40 +1,48 @@
-import prismadb from "@/lib/prismadb";
-import { auth } from "@clerk/nextjs";
 import { NextResponse } from "next/server";
+import { db } from "@/lib/firebase";
+import { getCurrentUser } from "@/lib/auth";
 
 export async function PATCH(
     req: Request,
-    { params }: { params: { storeId: string } }
+    { params }: { params: Promise<{ storeId: string }> }
 ) {
     try {
-        const { userId } = auth();
+        const { storeId } = await params;
+        const user = await getCurrentUser();
         const body = await req.json();
 
         const { name } = body;
 
-        if (!userId) {
+        if (!user) {
             return new NextResponse("Unauthenticated", { status: 401 });
         }
 
         if (!name) {
-            return new NextResponse("Name is requiered", { status: 400 });
+            return new NextResponse("Name is required", { status: 400 });
         }
 
-        if (!params.storeId) {
-            return new NextResponse("Store id is requiered", { status: 400 });
+        if (!storeId) {
+            return new NextResponse("Store id is required", { status: 400 });
         }
 
-        const store = await prismadb.store.updateMany({
-            where: {
-                id: params.storeId,
-                userId
-            },
-            data: {
-                name
-            }
+        // Verify store ownership
+        const storeDoc = await db.collection('stores').doc(storeId).get();
+
+        if (!storeDoc.exists || storeDoc.data()?.userId !== user.userId) {
+            return new NextResponse("Unauthorized", { status: 403 });
+        }
+
+        await db.collection('stores').doc(storeId).update({
+            name,
+            updatedAt: new Date()
         });
 
-        return NextResponse.json(store);
+        const updatedStore = await db.collection('stores').doc(storeId).get();
+
+        return NextResponse.json({
+            id: updatedStore.id,
+            ...updatedStore.data()
+        });
 
     } catch (error) {
         console.log('[STORE_PATCH]', error);
@@ -44,27 +52,41 @@ export async function PATCH(
 
 export async function DELETE(
     req: Request,
-    { params }: { params: { storeId: string } }
+    { params }: { params: Promise<{ storeId: string }> }
 ) {
     try {
-        const { userId } = auth();
+        const { storeId } = await params;
+        const user = await getCurrentUser();
 
-        if (!userId) {
+        if (!user) {
             return new NextResponse("Unauthenticated", { status: 401 });
         }
 
-        if (!params.storeId) {
-            return new NextResponse("Store id is requiered", { status: 400 });
+        if (!storeId) {
+            return new NextResponse("Store id is required", { status: 400 });
         }
 
-        const store = await prismadb.store.deleteMany({
-            where: {
-                id: params.storeId,
-                userId
-            }
-        });
+        // Verify store ownership
+        const storeDoc = await db.collection('stores').doc(storeId).get();
 
-        return NextResponse.json(store);
+        if (!storeDoc.exists || storeDoc.data()?.userId !== user.userId) {
+            return new NextResponse("Unauthorized", { status: 403 });
+        }
+
+        // Delete all subcollections first
+        const subcollections = ['billboards', 'categories', 'sizes', 'colors', 'products', 'orders'];
+
+        for (const subcollection of subcollections) {
+            const snapshot = await db.collection('stores').doc(storeId).collection(subcollection).get();
+            const batch = db.batch();
+            snapshot.docs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+        }
+
+        // Delete the store
+        await db.collection('stores').doc(storeId).delete();
+
+        return NextResponse.json({ success: true });
 
     } catch (error) {
         console.log('[STORE_DELETE]', error);

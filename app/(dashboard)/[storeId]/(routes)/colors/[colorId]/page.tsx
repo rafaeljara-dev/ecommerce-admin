@@ -1,25 +1,39 @@
-import prismadb from "@/lib/prismadb";
+import { db } from "@/lib/firebase";
 
 import { ColorForm } from "./components/color-form";
 
 const ColorPage = async ({
-  params
+    params
 }: {
-  params: { colorId: string }
+    params: Promise<{ storeId: string; colorId: string }>
 }) => {
-  const color = await prismadb.color.findUnique({
-    where: {
-      id: params.colorId
-    }
-  });
+    const { storeId, colorId } = await params;
 
-  return ( 
-    <div className="flex-col">
-      <div className="flex-1 space-y-4 p-8 pt-6">
-        <ColorForm initialData={color} />
-      </div>
-    </div>
-  );
-}
+    let color = null;
+
+    if (colorId !== 'new') {
+        const colorDoc = await db
+            .collection('stores')
+            .doc(storeId)
+            .collection('colors')
+            .doc(colorId)
+            .get();
+
+        if (colorDoc.exists) {
+            color = {
+                id: colorDoc.id,
+                ...colorDoc.data()
+            };
+        }
+    }
+
+    return (
+        <div className="flex-col">
+            <div className="flex-1 space-y-4 p-8 pt-6">
+                <ColorForm initialData={color} />
+            </div>
+        </div>
+    );
+};
 
 export default ColorPage;

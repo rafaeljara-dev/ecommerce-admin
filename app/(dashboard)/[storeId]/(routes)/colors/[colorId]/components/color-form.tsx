@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { toast } from "react-hot-toast"
 import { Trash } from "lucide-react"
-import { Color } from "@prisma/client"
+import { Color } from "@/types"
 import { useParams, useRouter } from "next/navigation"
 
 import { Input } from "@/components/ui/input"

@@ -2,7 +2,7 @@
 
 import axios from "axios";
 import * as z from "zod"
-import { Store } from "@prisma/client";
+import { Store } from "@/types";
 import { Server, Trash } from "lucide-react";
 import { useForm } from "react-hook-form"
 
